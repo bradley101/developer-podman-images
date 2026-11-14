@@ -216,6 +216,10 @@ Your `~/workspace` volume and SSH host keys are kept.
   treesitter parsers are already installed. The parsers cover C, C++, CMake,
   Python, Lua, Rust, Bash, JSON, YAML, TOML and Markdown. Add more with
   `:TSInstall <lang>`.
+- The build compiles parsers with `clang`. Some parsers have very large
+  generated sources (e.g. `gitcommit`), and GCC needs more than 4 GB of RAM to
+  compile them, while clang needs under 1 GB. When you install parsers yourself,
+  start Neovim with `CC=clang nvim` to avoid out-of-memory failures.
 - ConfigChad enables `clangd`, `rust-analyzer` and NvChad's default `lua_ls`,
   and all three are installed system-wide. For C++ projects, create
   `compile_commands.json` with `cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON` or

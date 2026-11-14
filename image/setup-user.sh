@@ -12,6 +12,12 @@ INSTALL_RUST="${INSTALL_RUST:-1}"
 NVIM_CONFIG_REPO="${NVIM_CONFIG_REPO:-https://github.com/bradley101/ConfigChad}"
 NVIM_CONFIG_REF="${NVIM_CONFIG_REF:-main}"
 NVIM_STRICT="${NVIM_STRICT:-1}"   # fail the build if a plugin/parser is missing
+# Compiler for treesitter parsers. clang needs far less memory than GCC for
+# the big generated parser.c files: the gitcommit parser gets OOM-killed with
+# GCC 15 even with 4 GB of RAM, but builds with clang in < 1 GB.
+TS_CC="${TS_CC:-clang}"
+# Parallel parser compiles (memory use grows with this); default: min(nproc, 4)
+TS_JOBS="${TS_JOBS:-$(( $(nproc) < 4 ? $(nproc) : 4 ))}"
 TS_PARSERS="${TS_PARSERS:-c cpp cmake make python lua luadoc vim vimdoc rust bash json yaml toml markdown markdown_inline printf query regex diff gitcommit}"
 
 log() { echo "[setup-user] $*"; }
@@ -110,11 +116,29 @@ LUA_DIR="$(mktemp -d)"
 
 cat > "$LUA_DIR/ts-install.lua" <<'EOF'
 local parsers = vim.split(os.getenv("TS_PARSERS") or "", "%s+", { trimempty = true })
+local jobs = tonumber(os.getenv("TS_JOBS") or "") or 2
+local WAIT = 30 * 60 * 1000
 require("lazy").load({ plugins = { "nvim-treesitter" } })
+
+local function missing()
+  local m = {}
+  for _, lang in ipairs(parsers) do
+    if #vim.api.nvim_get_runtime_file("parser/" .. lang .. ".so", false) == 0 then
+      table.insert(m, lang)
+    end
+  end
+  return m
+end
+
 local ok, ts = pcall(require, "nvim-treesitter")
 if ok and type(ts.install) == "function" then
   -- nvim-treesitter `main` branch
-  ts.install(parsers, { summary = true }):wait(30 * 60 * 1000)
+  ts.install(parsers, { summary = true, max_jobs = jobs }):wait(WAIT)
+  -- retry failures one at a time (least memory pressure)
+  for _, lang in ipairs(missing()) do
+    print("retrying parser " .. lang .. " on its own")
+    ts.install({ lang }, { force = true, summary = true, max_jobs = 1 }):wait(WAIT)
+  end
 else
   -- nvim-treesitter `master` branch
   vim.cmd("TSInstallSync! " .. table.concat(parsers, " "))
@@ -142,11 +166,12 @@ EOF
 
 nvim_setup() {
   log "installing neovim plugins (lazy.nvim)"
-  nvim --headless "+Lazy! sync" +qa
-  log "installing treesitter parsers: $TS_PARSERS"
-  nvim --headless "+luafile $LUA_DIR/ts-install.lua" +qa
+  CC="$TS_CC" nvim --headless "+Lazy! sync" +qa
   # once more so every lazy `build` hook (e.g. base46 theme cache) settles
-  nvim --headless "+Lazy! sync" +qa
+  # before the parsers are installed
+  CC="$TS_CC" nvim --headless "+Lazy! sync" +qa
+  log "installing treesitter parsers with CC=$TS_CC, $TS_JOBS at a time: $TS_PARSERS"
+  CC="$TS_CC" TS_JOBS="$TS_JOBS" nvim --headless "+luafile $LUA_DIR/ts-install.lua" +qa
   nvim --headless "+luafile $LUA_DIR/verify.lua"
 }
 
