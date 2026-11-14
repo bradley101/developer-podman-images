@@ -74,6 +74,48 @@ JetBrains Gateway, and `nvim` over SSH.
 | `DEVBOX_BIND` | `0.0.0.0` | Set `127.0.0.1` to allow local connections only. |
 | `DEVBOX_PUBKEY` | `~/.ssh/*.pub` | key file(s) to authorize, separated by `:` |
 | `DEVBOX_PASSWORD` | unset | Sets a password for `dev` and turns on SSH password login. `install-service` stores it as a Podman secret. |
+| `DEVBOX_WORKSPACE` | unset | A host directory to use as `~/workspace` in place of the `devbox-workspace` volume |
+| `DEVBOX_MOUNTS` | unset | Extra host directories, comma separated: `host:container[:options]` |
+
+`./devbox.sh run` passes any extra arguments through to `podman run`, for
+example `./devbox.sh run -e FOO=bar`.
+
+## Mounting your own directories
+
+Set these variables when you run `./devbox.sh run` or `./devbox.sh install-service`:
+
+```bash
+# your local ~/code becomes ~/workspace inside the box
+DEVBOX_WORKSPACE=~/code ./devbox.sh install-service
+```
+
+```bash
+# extra mounts; a relative container path is relative to /home/dev
+DEVBOX_WORKSPACE=~/code DEVBOX_MOUNTS="~/notes:notes,~/datasets:/data:ro" ./devbox.sh run
+```
+
+- Each `DEVBOX_MOUNTS` entry is `host:container[:options]`. The options are
+  passed to `podman --volume`, e.g. `ro`. Paths can't contain `,` or `:`.
+- `~` and relative host paths are resolved. A host directory that doesn't exist
+  is reported as an error.
+- With `install-service`, the mounts are written into the systemd unit. To
+  change them, run `install-service` again with new values. With `run`, use
+  `./devbox.sh rm` and run it again.
+- **SELinux** (Fedora, RHEL): a mount with no options gets `:z`, so the
+  container can access it. Your home directory itself is never relabeled. If
+  you give options yourself, include `z` when you need it.
+
+**File ownership.** With **rootless** Podman (`./devbox.sh` run as your normal
+user), the helper adds `--userns=keep-id:uid=1000,gid=1000`. This maps *your*
+host user to `dev` inside the container. Files you edit in the box stay owned
+by you on the host, whatever your host UID is. The first start after this
+setting changes takes a little longer, because Podman prepares an ID-mapped
+copy of the image.
+
+With **rootful** Podman (`sudo`), UIDs are not remapped, so `dev` (UID 1000)
+can only write to host files owned by UID 1000. The script warns you if that
+isn't the case. Use rootless Podman, or build with
+`--build-arg USER_UID=<uid> --build-arg USER_GID=<gid>`.
 
 ## "Always running"
 

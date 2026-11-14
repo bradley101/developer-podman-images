@@ -60,8 +60,13 @@ if [[ -n "${TZ:-}" && -e "/usr/share/zoneinfo/$TZ" ]]; then
   echo "$TZ" > /etc/timezone
 fi
 
-# The workspace volume may be created empty and root-owned
-chown "$USERNAME:$USERNAME" "$USER_HOME/workspace" 2>/dev/null || true
+# A freshly created workspace volume is empty and root-owned: hand it to the
+# dev user. Never touch a non-empty directory (it may be bind-mounted from
+# the host).
+ws="$USER_HOME/workspace"
+if [[ -d "$ws" && "$(stat -c %u "$ws")" == 0 && -z "$(ls -A "$ws" 2>/dev/null)" ]]; then
+  chown "$USERNAME:$USERNAME" "$ws" 2>/dev/null || true
+fi
 
 /usr/sbin/sshd -t
 log "sshd listening on port 22 (user: $USERNAME)"
