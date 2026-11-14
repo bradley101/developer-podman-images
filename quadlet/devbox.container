@@ -1,0 +1,38 @@
+# Podman Quadlet unit: runs devbox as a systemd service that is always running
+# (restarted on failure and started at boot).
+#
+# Installed by `./devbox.sh install-service`, which fills in the @...@ values.
+# Manual install (rootless):
+#   cp devbox.container ~/.config/containers/systemd/
+#   systemctl --user daemon-reload && systemctl --user start devbox
+#   loginctl enable-linger "$USER"     # start at boot without a login
+# Rootful: copy to /etc/containers/systemd/ and use `systemctl` without --user.
+
+[Unit]
+Description=devbox developer environment (SSH on port @PORT@)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+Image=@IMAGE@
+ContainerName=@NAME@
+HostName=@NAME@
+PublishPort=@BIND@:@PORT@:22
+Volume=@NAME@-workspace:/home/@USER@/workspace
+Volume=@NAME@-hostkeys:/etc/ssh/hostkeys
+Volume=@KEYS_DIR@:/etc/devbox:ro,Z
+# gdb / strace / lldb / perf need ptrace & perf events
+AddCapability=SYS_PTRACE PERFMON
+SeccompProfile=unconfined
+HealthCmd=bash -c '</dev/tcp/127.0.0.1/22'
+HealthInterval=60s
+HealthOnFailure=kill
+
+[Service]
+Restart=always
+RestartSec=5
+# first start may need to pull / create volumes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

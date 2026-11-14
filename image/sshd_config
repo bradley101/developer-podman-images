@@ -1,0 +1,24 @@
+# devbox sshd settings (drop-in, loaded by /etc/ssh/sshd_config)
+Port 22
+
+# Host keys live in a volume so the fingerprint survives container re-creation
+HostKey /etc/ssh/hostkeys/ssh_host_ed25519_key
+HostKey /etc/ssh/hostkeys/ssh_host_ecdsa_key
+HostKey /etc/ssh/hostkeys/ssh_host_rsa_key
+
+PermitRootLogin no
+PubkeyAuthentication yes
+# Keys from ~/.ssh/authorized_keys and/or a file mounted read-only from the host
+AuthorizedKeysFile .ssh/authorized_keys /etc/devbox/authorized_keys
+KbdInteractiveAuthentication no
+# PasswordAuthentication is decided at start-up by entrypoint.sh
+# (enabled only when DEV_PASSWORD is set), see 00-devbox-password.conf
+
+AllowAgentForwarding yes
+AllowTcpForwarding yes
+X11Forwarding yes
+PrintMotd no
+ClientAliveInterval 60
+ClientAliveCountMax 5
+# Let clients send locale / terminal settings
+AcceptEnv LANG LC_* COLORTERM TERM_PROGRAM TERM_PROGRAM_VERSION
